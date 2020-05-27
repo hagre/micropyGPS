@@ -1,6 +1,6 @@
 """
 # MicropyGPS - a GPS NMEA sentence parser for Micropython/Python 3.X
-# Copyright (c) 2017 Michael Calvin McCoy (calvin.mccoy@gmail.com)
+# Copyright (c) 2017 Michael Calvin McCoy (calvin.mccoy@protonmail.com)
 # The MIT License (MIT) - see LICENSE file
 """
 
@@ -32,8 +32,8 @@ class MicropyGPS(object):
     __NO_FIX = 1
     __FIX_2D = 2
     __FIX_3D = 3
-    __DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W',
-                    'WNW', 'NW', 'NNW']
+    __DIRECTIONS = ('N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W',
+                    'WNW', 'NW', 'NNW')
     __MONTHS = ('January', 'February', 'March', 'April', 'May',
                 'June', 'July', 'August', 'September', 'October',
                 'November', 'December')
@@ -72,15 +72,15 @@ class MicropyGPS(object):
         #####################
         # Data From Sentences
         # Time
-        self.timestamp = (0, 0, 0)
-        self.date = (0, 0, 0)
+        self.timestamp = [0, 0, 0]
+        self.date = [0, 0, 0]
         self.local_offset = local_offset
 
         # Position/Motion
-        self._latitude = (0, 0.0, 'N')
-        self._longitude = (0, 0.0, 'W')
+        self._latitude = [0, 0.0, 'N']
+        self._longitude = [0, 0.0, 'W']
         self.coord_format = location_formatting
-        self.speed = (0.0, 0.0, 0.0)
+        self.speed = [0.0, 0.0, 0.0]
         self.course = 0.0
         self.altitude = 0.0
         self.geoid_height = 0.0
@@ -242,17 +242,20 @@ class MicropyGPS(object):
 
             # Course
             try:
-                course = float(self.gps_segments[8])
+                if self.gps_segments[8]:
+                    course = float(self.gps_segments[8])
+                else:
+                    course = 0.0
             except ValueError:
                 return False
 
             # TODO - Add Magnetic Variation
 
             # Update Object Data
-            self._latitude = (lat_degs, lat_mins, lat_hemi)
-            self._longitude = (lon_degs, lon_mins, lon_hemi)
+            self._latitude = [lat_degs, lat_mins, lat_hemi]
+            self._longitude = [lon_degs, lon_mins, lon_hemi]
             # Include mph and hm/h
-            self.speed = (spd_knt, spd_knt * 1.151, spd_knt * 1.852)
+            self.speed = [spd_knt, spd_knt * 1.151, spd_knt * 1.852]
             self.course = course
             self.valid = True
 
@@ -260,11 +263,10 @@ class MicropyGPS(object):
             self.new_fix_time()
 
         else:  # Clear Position Data if Sentence is 'Invalid'
-            self._latitude = (0, 0.0, 'N')
-            self._longitude = (0, 0.0, 'W')
-            self.speed = (0.0, 0.0, 0.0)
+            self._latitude = [0, 0.0, 'N']
+            self._longitude = [0, 0.0, 'W']
+            self.speed = [0.0, 0.0, 0.0]
             self.course = 0.0
-            self.date = (0, 0, 0)
             self.valid = False
 
         return True
@@ -314,16 +316,16 @@ class MicropyGPS(object):
                 return False
 
             # Update Object Data
-            self._latitude = (lat_degs, lat_mins, lat_hemi)
-            self._longitude = (lon_degs, lon_mins, lon_hemi)
+            self._latitude = [lat_degs, lat_mins, lat_hemi]
+            self._longitude = [lon_degs, lon_mins, lon_hemi]
             self.valid = True
 
             # Update Last Fix Time
             self.new_fix_time()
 
         else:  # Clear Position Data if Sentence is 'Invalid'
-            self._latitude = (0, 0.0, 'N')
-            self._longitude = (0, 0.0, 'W')
+            self._latitude = [0, 0.0, 'N']
+            self._longitude = [0, 0.0, 'W']
             self.valid = False
 
         return True
@@ -362,14 +364,17 @@ class MicropyGPS(object):
             # Number of Satellites in Use
             satellites_in_use = int(self.gps_segments[7])
 
-            # Horizontal Dilution of Precision
-            hdop = float(self.gps_segments[8])
-
             # Get Fix Status
             fix_stat = int(self.gps_segments[6])
 
-        except ValueError:
+        except (ValueError, IndexError):
             return False
+
+        try:
+            # Horizontal Dilution of Precision
+            hdop = float(self.gps_segments[8])
+        except (ValueError, IndexError):
+            hdop = 0.0
 
         # Process Location and Speed Data if Fix is GOOD
         if fix_stat:
@@ -401,16 +406,17 @@ class MicropyGPS(object):
                 altitude = float(self.gps_segments[9])
                 geoid_height = float(self.gps_segments[11])
             except ValueError:
-                return False
+                altitude = 0
+                geoid_height = 0
 
             # Update Object Data
-            self._latitude = (lat_degs, lat_mins, lat_hemi)
-            self._longitude = (lon_degs, lon_mins, lon_hemi)
+            self._latitude = [lat_degs, lat_mins, lat_hemi]
+            self._longitude = [lon_degs, lon_mins, lon_hemi]
             self.altitude = altitude
             self.geoid_height = geoid_height
 
         # Update Object Data
-        self.timestamp = (hours, minutes, seconds)
+        self.timestamp = [hours, minutes, seconds]
         self.satellites_in_use = satellites_in_use
         self.hdop = hdop
         self.fix_stat = fix_stat
@@ -648,6 +654,12 @@ class MicropyGPS(object):
         else:
             return False
 
+    def unset_satellite_data_updated(self):
+        """
+        Mark GSV sentences as read indicating the data has been used and future updates are fresh
+        """
+        self.last_sv_sentence = 0
+
     def satellites_visible(self):
         """
         Returns a list of of the satellite PRNs currently visible to the receiver
@@ -810,7 +822,8 @@ class MicropyGPS(object):
                            'GPGSV': gpgsv, 'GLGSV': gpgsv,
                            'GPGLL': gpgll, 'GLGLL': gpgll,
                            'GNGGA': gpgga, 'GNRMC': gprmc,
-                           'GNVTG': gpvtg,
+                           'GNVTG': gpvtg, 'GNGLL': gpgll,
+                           'GNGSA': gpgsa,
                           }
 
 if __name__ == "__main__":
